@@ -7,5 +7,19 @@
   "period": "成本追踪样例1",
   "trend": "持平",
   "anomaly": "无",
-  "calculated_at": "2026-11-19T01:42:58.811706+00:00"
+  "calculated_at": "2026-11-22T13:29:05.441085+00:00",
+  "domain_bills": {
+    "asset_id": "成本追踪样例1",
+    "bills": [],
+    "totals": {
+      "domain_totals": {
+        "华东数据域": 420.0,
+        "华北数据域": 100.0
+      },
+      "fee_total": 520.0,
+      "entry_total": 520.0,
+      "balanced": true,
+      "duplicate_entries": 0
+    }
+  }
 }

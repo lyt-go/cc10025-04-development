@@ -70,6 +70,45 @@ class CostTrackerService(BaseModuleService):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
 
+    def get_bill_summary(self, asset_id: str | None = None) -> dict[str, Any]:
+        """费用交接分录聚合的域账单汇总，供成本追踪核对各域承担的费用。"""
+        from app.services.cost_handoff import CostHandoffService
+
+        handoff = CostHandoffService()
+        bills = handoff.domain_bills()
+        if asset_id:
+            bills = [
+                {
+                    **bill,
+                    "来源分录": [
+                        item for item in bill.get("来源分录", [])
+                        if str(item.get("关联资产")) == asset_id
+                    ],
+                }
+                for bill in bills
+            ]
+            bills = [bill for bill in bills if bill["来源分录"]]
+        return {
+            "asset_id": asset_id or "ALL",
+            "bills": bills,
+            "totals": handoff.bill_totals(),
+        }
+
+    def list_asset_fees(self, asset_id: str) -> list[dict[str, Any]]:
+        """列出某资产的整笔费用记录及其交接分录来源。"""
+        from app.services.cost_handoff import CostHandoffService
+
+        handoff = CostHandoffService()
+        fees = handoff.list_fees(asset_id)
+        entries = {
+            str(row.get("费用编号")): row
+            for row in store.rows("cost_handoff_entry")
+        }
+        return [
+            {**fee, "交接分录": entries.get(str(fee.get("费用编号")))}
+            for fee in fees
+        ]
+
     def run_action(self, entry_id: int, action: str) -> tuple[dict[str, Any] | None, str]:
         if action == "提交核算":
             return self.calculate_cost(entry_id)
@@ -125,6 +164,8 @@ class CostTrackerService(BaseModuleService):
             "trend": str(entry.get("趋势方向", "")),
             "anomaly": str(entry.get("异常标记", "")),
             "calculated_at": datetime.now(timezone.utc).isoformat(),
+            # 费用交接分录聚合的域账单：交接双方可据此核对计入本域的费用及来源
+            "domain_bills": self.get_bill_summary(asset_id),
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(record, f, ensure_ascii=False, indent=2, default=str)

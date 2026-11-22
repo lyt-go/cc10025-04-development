@@ -21,6 +21,8 @@ from app.services.backfill_job import BackfillJobService
 from app.services.quality_report import QualityReportService
 from app.services.reclaim_job import ReclaimJobService
 from app.services.change_notice import ChangeNoticeService
+from app.services.asset_ownership import AssetOwnershipService
+from app.services.cost_handoff import CostHandoffService
 
 _SERVICE_CLASSES = [
     AssetCatalogService,
@@ -41,6 +43,9 @@ _SERVICE_CLASSES = [
     QualityReportService,
     ReclaimJobService,
     ChangeNoticeService,
+    # 资产归属交接先于费用交接分录实例化：费用归属回查依赖归属时间线
+    AssetOwnershipService,
+    CostHandoffService,
 ]
 
 _INSTANCES: dict[str, object] = {}
@@ -48,6 +53,10 @@ _INSTANCES: dict[str, object] = {}
 for cls in _SERVICE_CLASSES:
     instance = cls()
     _INSTANCES[cls.MODULE] = instance
+
+# 费用交接分录的 HTTP 模块路径是 cost_handoff，数据表为 cost_handoff_entry，
+# 这里补一个路径别名，让资源路由按 cost_handoff 也能取到服务。
+_INSTANCES["cost_handoff"] = _INSTANCES["cost_handoff_entry"]
 
 
 def service_for(module: str) -> object | None:
@@ -57,6 +66,16 @@ def service_for(module: str) -> object | None:
 
 def all_services() -> list:
     return list(_INSTANCES.values())
+
+
+# 服务容器就绪后做一次全量费用结算，生成费用交接分录；
+# 已结账周期（种子中的 cost_closed_period）按原依据冻结归属。
+_handoff = _INSTANCES.get("cost_handoff")
+if isinstance(_handoff, CostHandoffService):
+    _handoff.full_settlement()
+    for _closed in list(_handoff.domain_bills()):
+        if _closed.get("冻结分录数"):
+            _handoff.close_period(str(_closed["归属域"]), str(_closed["统计周期"]))
 
 
 __all__ = [
@@ -80,4 +99,6 @@ __all__ = [
     "QualityReportService",
     "ReclaimJobService",
     "ChangeNoticeService",
+    "AssetOwnershipService",
+    "CostHandoffService",
 ]
